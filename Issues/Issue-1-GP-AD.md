@@ -16,6 +16,15 @@ Current group policy setup links GP's at the root of `OU=Workstations`
 - Universal GP's present a risk of settings "piggybacking"
 - "Block inheritance" can mitigate risk, but can be overridden with "Force"
 
+#### Piggybacking example:
+
+![GP-802.1X Wired Windows Client](GP-802.1X-Wired-Windows-Client.png)
+
+![Piggybacking example](Piggyback-example.png)
+
+- "Fast User Switching" setting is piggybacking off of GP `802.1X Wired Windows Client` 
+
+
 ### Resolution
 - Treat `OU=Workstations` as a co-shared environment
 - Apply GP's at sub-OU level
