@@ -6,7 +6,7 @@ This document outlines issues with Group Policy application in our co-shared Act
 
 ## Group Policy Layout
 
-![Group Policy at the root of Workstations](OU-Workstation-GP-layout-1.png)
+![Group Policy at the root of Workstations](./assets/images/OU-Workstation-GP-layout-1.png)
 
 Current group policy setup links GP's at the root of `OU=Workstations`
 
@@ -18,9 +18,9 @@ Current group policy setup links GP's at the root of `OU=Workstations`
 
 #### Piggybacking example:
 
-![GP-802.1X Wired Windows Client](GP-802.1X-Wired-Windows-Client.png)
+![GP-802.1X Wired Windows Client](./assets/images/GP-802.1X-Wired-Windows-Client.png)
 
-![Piggybacking example](Piggyback-example.png)
+![Piggybacking example](./assets/images/Piggyback-example.png)
 
 - "Fast User Switching" setting is piggybacking off of GP `802.1X Wired Windows Client` 
 
@@ -33,7 +33,7 @@ Current group policy setup links GP's at the root of `OU=Workstations`
 
 ## Group Policy Documentation (changelog)
 
-![Group Policy Metadata](GP-metadata-timestamps.png)
+![Group Policy Metadata](./assets/images/GP-metadata-timestamps.png)
 
 - Group Policy timestamp is helpful, but lacks specifics for "version control"
 - Advanced troubleshooting requires details on Group Policy settings correlated with time, which a changelog provides
@@ -41,7 +41,7 @@ Current group policy setup links GP's at the root of `OU=Workstations`
 
 #### Using Group Policy "Comment" as changelog
 
-![Group Policy Documentation](GP-ChangeLog.png)
+![Group Policy Documentation](./assets/images/GP-ChangeLog.png)
 
 
 

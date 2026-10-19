@@ -1,28 +1,17 @@
-## Ignore Visual Studio Code temporary files
-##
-
 # General Directories
 
 # Individual files
 *.log
 
-
-
 # User-specific files
-*.rsuser
+
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
 *.env
 
-# Local History for Visual Studio
-**/.localhistory/
-
-# Visual Studio History (VSHistory) files
-.vshistory/
-
-
+# Ignore Visual Studio Code temporary files
 # VS Code files for those working on multiple tools
 .vscode/*
 !.vscode/settings.json
@@ -31,7 +20,10 @@
 !.vscode/extensions.json
 !.vscode/*.code-snippets
 
-# Local History for Visual Studio Code
+## Local History for Visual Studio Code
 .history/
-
+## Local History for Visual Studio
+**/.localhistory/
+## Visual Studio History (VSHistory) files
+.vshistory/
 
