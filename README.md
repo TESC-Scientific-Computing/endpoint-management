@@ -19,10 +19,10 @@ Microsoft Entra ID device registration (Entra joined, Hybrid Entra joined, or En
 query agent `Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Microsoft Operations Manager\3.0\Setup" | Select-Object Version`
 
 ## Github issues Labels
-- AD  Active Directory
-- GP  Group Policy
-- Intune  Microsoft Intune
-- MDE  Microsoft Defender for Endpoint
+- **AD**  _Active Directory_
+- **GP**  _Group Policy_
+- **Intune**  _Microsoft Intune_
+- **MDE**  _Microsoft Defender for Endpoint
 
 
 
