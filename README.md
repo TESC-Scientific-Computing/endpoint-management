@@ -1,6 +1,11 @@
 # Endpoint Management
 
-## dsregcmd (Device State Registration Command)
+## Start here
+For full context, read: [Memorandum-SO-OIT-Intune](https://github.com/TESC-Scientific-Computing/memorandums/blob/main/Memorandum-SO-OIT-Intune.md) (Science Operations to OIT, April 17, 2026)
+
+## Device State Registration (Hybrid Entra join)
+
+### dsregcmd (Device State Registration Command)
 Microsoft Entra ID device registration (Entra joined, Hybrid Entra joined, or Entra registered / Workplace Join
 
 `dsregcmd /status /debug` get status
