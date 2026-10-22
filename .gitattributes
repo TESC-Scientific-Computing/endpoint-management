@@ -1,0 +1,9 @@
+*.md linguist-language=Markdown linguist-detectable=true linguist-documentation=false
+
+# Optional: make sure common Markdown assets stay binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.svg         text
+*.pdf         binary
