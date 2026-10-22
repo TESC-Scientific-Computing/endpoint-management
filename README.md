@@ -30,7 +30,7 @@ query agent `Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Microsoft Operations Man
 - **AD**  _Active Directory_
 - **GP**  _Group Policy_
 - **Intune**  _Microsoft Intune_
-- **MDE**  _Microsoft Defender for Endpoint
+- **MDE**  _Microsoft Defender for Endpoint_
 
 
 
