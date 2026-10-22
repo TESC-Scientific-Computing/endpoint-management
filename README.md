@@ -10,6 +10,12 @@ For full context, read: [Memorandum-SO-OIT-Intune](https://github.com/TESC-Scien
 - [ ] [Access to Intune Admin Center](https://github.com/TESC-Scientific-Computing/endpoint-management/issues/3)
 - [ ] [Access to Microsoft Defender for Endpoint portal](https://github.com/TESC-Scientific-Computing/endpoint-management/issues/4)
 
+#### Specific labels used in this repo
+- **AD**  _Active Directory_
+- **GP**  _Group Policy_
+- **Intune**  _Microsoft Intune_
+- **MDE**  _Microsoft Defender for Endpoint_
+
 
 ## Installing the Microsoft Graph PowerShell SDK
 Requires PSGallery to be trusted, and the Microsoft.Graph module to be installed for the current user.
@@ -46,13 +52,6 @@ Microsoft Entra ID device registration (Entra joined, Hybrid Entra joined, or En
 
 query agent `Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Microsoft Operations Manager\3.0\Setup" | Select-Object Version`
 
-
-
-### Specific labels used in this repo
-- **AD**  _Active Directory_
-- **GP**  _Group Policy_
-- **Intune**  _Microsoft Intune_
-- **MDE**  _Microsoft Defender for Endpoint_
 
 
 
