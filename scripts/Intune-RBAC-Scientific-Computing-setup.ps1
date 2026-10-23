@@ -16,18 +16,11 @@
 .NOTES
   Requires:
   - Microsoft.Graph.Authentication, Microsoft.Graph.Groups, Microsoft.Graph.DeviceManagement,
-    Microsoft.Graph.DeviceManagement.Administration modules (or Microsoft.Graph meta-module)
+    Microsoft.Graph.DeviceManagement.Administration modules; any that are missing are installed
+    from PSGallery for the current user (PSGallery is set to Trusted) at the start of the script
   - Global Administrator or Privileged Role Administrator + Intune Administrator rights to run once
   - Tenant: 22adcff7-c06f-49a6-8f20-50711c40ddaa
 #>
-
-
-
-if ((Get-PSRepository -Name "PSGallery").InstallationPolicy -ne "Trusted") {
-    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
-}
-
-#Requires -Modules Microsoft.Graph.Authentication, Microsoft.Graph.Groups, Microsoft.Graph.DeviceManagement, Microsoft.Graph.DeviceManagement.Administration
 
 [CmdletBinding()]
 param(
@@ -37,6 +30,73 @@ param(
     [string]$ScopeTagDescription   = "Scope tag for Scientific Computing devices and objects - enables delegated self-management",
     [string]$TenantId              = "22adcff7-c06f-49a6-8f20-50711c40ddaa"
 )
+
+function Write-Log {
+    param([string]$Message, [string]$Level = 'INFO')
+    $color = switch ($Level) { 'START' { 'Cyan' } 'DONE' { 'Green' } 'SKIP' { 'Yellow' } 'WARN' { 'DarkYellow' } 'ERROR' { 'Red' } default { 'Gray' } }
+    Write-Host ("[{0}] [{1,-5}] {2}" -f (Get-Date -Format 'HH:mm:ss'), $Level, $Message) -ForegroundColor $color
+}
+
+$ScriptTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$StepTimer   = [System.Diagnostics.Stopwatch]::StartNew()
+$StepTotal   = 8
+$StepNumber  = 0
+function Start-Step {
+    param([string]$Name)
+    $script:StepNumber++
+    $script:StepTimer.Restart()
+    Write-Host ""
+    Write-Log "Step $script:StepNumber/${script:StepTotal}: $Name - starting" 'START'
+}
+function Complete-Step {
+    param([string]$Detail)
+    $elapsed = [math]::Round($script:StepTimer.Elapsed.TotalSeconds, 1)
+    Write-Log "Step $script:StepNumber/${script:StepTotal} finished in ${elapsed}s$(if ($Detail) { ' - ' + $Detail })" 'DONE'
+}
+
+Write-Log "Intune RBAC setup for Scientific Computing started (tenant $TenantId)" 'START'
+Write-Log "Planned: group '$AdminGroupName', scope tag '$ScopeTagName', role '$CustomRoleName', role assignment" 'INFO'
+
+Write-Log "Checking PSGallery repository trust..." 'INFO'
+if ((Get-PSRepository -Name "PSGallery").InstallationPolicy -ne "Trusted") {
+    Write-Log "PSGallery is not trusted; setting InstallationPolicy to Trusted" 'WARN'
+    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+    Write-Log "PSGallery is now trusted" 'DONE'
+} else {
+    Write-Log "PSGallery is already trusted" 'SKIP'
+}
+
+# Modules are installed here rather than with #Requires, which would stop the script before it could install them
+$RequiredModules = @(
+    'Microsoft.Graph.Authentication',
+    'Microsoft.Graph.Groups',
+    'Microsoft.Graph.DeviceManagement',
+    'Microsoft.Graph.DeviceManagement.Administration'
+)
+Write-Log "Checking required modules: $($RequiredModules -join ', ')" 'INFO'
+$MissingModules = @($RequiredModules | Where-Object { -not (Get-Module -ListAvailable -Name $_) })
+if ($MissingModules.Count -gt 0) {
+    Write-Log "$($MissingModules.Count) module(s) missing: $($MissingModules -join ', ')" 'WARN'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    if (-not (Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue |
+              Where-Object { $_.Version -ge [version]'2.8.5.201' })) {
+        Write-Log "Installing NuGet package provider..." 'INFO'
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+        Write-Log "NuGet package provider installed" 'DONE'
+    }
+    foreach ($Module in $MissingModules) {
+        Write-Log "Installing module $Module from PSGallery (CurrentUser)..." 'INFO'
+        Install-Module -Name $Module -Repository PSGallery -Scope CurrentUser -Force -AllowClobber
+        Write-Log "Installed module $Module" 'DONE'
+    }
+} else {
+    Write-Log "All required modules are already installed" 'SKIP'
+}
+foreach ($Module in $RequiredModules) {
+    Write-Log "Importing module $Module..." 'INFO'
+    Import-Module -Name $Module -ErrorAction Stop
+}
+Write-Log "Modules ready" 'DONE'
 
 # --------------------------------------------------------------------------
 # 1. Connect to Microsoft Graph with the required permissions
@@ -50,79 +110,96 @@ $RequiredScopes = @(
     "Directory.ReadWrite.All"
 )
 
-Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
+Start-Step "Connect to Microsoft Graph"
+Write-Log "Requesting scopes: $($RequiredScopes -join ', ')" 'INFO'
+Write-Log "Signing in to tenant $TenantId (a sign-in prompt may appear)..." 'INFO'
 Connect-MgGraph -Scopes $RequiredScopes -TenantId $TenantId -NoWelcome
+$GraphContext = Get-MgContext
+Write-Log "Connected as $($GraphContext.Account) to tenant $($GraphContext.TenantId)" 'DONE'
+Complete-Step
 # Optionally: Select-MgProfile -Name "beta" if you need beta endpoints
 
 # --------------------------------------------------------------------------
 # 1a. Pre-flight check – current user's directory roles & groups
 # --------------------------------------------------------------------------
-Write-Host "`n=== Pre-flight: Your current directory roles and groups ===" -ForegroundColor Cyan
+Start-Step "Pre-flight: current user's directory roles and groups"
+Write-Log "Reading memberships for $($GraphContext.Account)..." 'INFO'
 try {
-    Get-MgUserMemberOf -UserId (Get-MgContext).Account -All |
+    $Memberships = @(Get-MgUserMemberOf -UserId (Get-MgContext).Account -All |
         ForEach-Object {
             [pscustomobject]@{
                 Type = $_.AdditionalProperties.'@odata.type' -replace '#microsoft.graph.',''
                 Name = $_.AdditionalProperties.displayName
             }
         } |
-        Sort-Object Type, Name |
-        Format-Table -AutoSize
+        Sort-Object Type, Name)
+    $Memberships | Format-Table -AutoSize
+    Complete-Step "$($Memberships.Count) memberships found"
 }
 catch {
-    Write-Warning "Could not retrieve membership information: $($_.Exception.Message)"
+    Write-Log "Could not retrieve membership information: $($_.Exception.Message)" 'WARN'
 }
 
 # --------------------------------------------------------------------------
 # 1b. Pre-flight check – existing Intune role assignments
 # --------------------------------------------------------------------------
-Write-Host "`n=== Pre-flight: Existing Intune RBAC role assignments ===" -ForegroundColor Cyan
+Start-Step "Pre-flight: existing Intune RBAC role assignments"
 try {
+    Write-Log "Ensuring read scope DeviceManagementRBAC.Read.All..." 'INFO'
     # Ensure we have the read scope (already included above, but re-connect is harmless)
     Connect-MgGraph -Scopes "DeviceManagementRBAC.Read.All" -TenantId $TenantId -NoWelcome | Out-Null
-    Get-MgDeviceManagementRoleAssignment -All |
+    Write-Log "Listing existing role assignments..." 'INFO'
+    $PreAssignments = @(Get-MgDeviceManagementRoleAssignment -All)
+    $PreAssignments |
         Select-Object DisplayName, Id |
         Format-Table -AutoSize
+    Complete-Step "$($PreAssignments.Count) role assignments found"
 }
 catch {
-    Write-Warning "Could not list existing role assignments: $($_.Exception.Message)"
+    Write-Log "Could not list existing role assignments: $($_.Exception.Message)" 'WARN'
 }
 
-Write-Host "`nProceeding with setup...`n" -ForegroundColor Green
+Write-Log "Pre-flight checks complete; proceeding with setup (changes will be made from here)" 'DONE'
 
 # --------------------------------------------------------------------------
 # 2. Create (or retrieve) the Entra ID security group for SciComp admins
 # --------------------------------------------------------------------------
-Write-Host "Ensuring Entra ID group '$AdminGroupName' exists..." -ForegroundColor Cyan
+Start-Step "Ensure Entra ID group '$AdminGroupName'"
+Write-Log "Looking up group '$AdminGroupName'..." 'INFO'
 
 $ExistingGroup = Get-MgGroup -Filter "displayName eq '$AdminGroupName'" -ErrorAction SilentlyContinue
 if ($ExistingGroup) {
     $AdminGroup = $ExistingGroup
-    Write-Host "  Group already exists: $($AdminGroup.Id)" -ForegroundColor Yellow
+    Write-Log "Group already exists, skipping creation: $($AdminGroup.Id)" 'SKIP'
 } else {
+    Write-Log "Group not found; creating security group '$AdminGroupName'..." 'INFO'
     $AdminGroup = New-MgGroup -DisplayName $AdminGroupName `
                               -MailEnabled:$false `
                               -MailNickname ($AdminGroupName -replace '[^a-zA-Z0-9]','') `
                               -SecurityEnabled `
                               -Description "Security group for Scientific Computing administrators. Members receive the custom Intune RBAC role scoped to Scientific-Computing."
-    Write-Host "  Created group: $($AdminGroup.Id)" -ForegroundColor Green
+    Write-Log "Created group: $($AdminGroup.Id)" 'DONE'
 }
+Complete-Step
 
 # --------------------------------------------------------------------------
 # 3. Create the Scope Tag "Scientific-Computing"
 # --------------------------------------------------------------------------
-Write-Host "Ensuring Scope Tag '$ScopeTagName' exists..." -ForegroundColor Cyan
+Start-Step "Ensure Scope Tag '$ScopeTagName'"
+Write-Log "Listing existing scope tags..." 'INFO'
 
 $ExistingTags = Get-MgDeviceManagementRoleScopeTag -All
 $ScopeTag = $ExistingTags | Where-Object { $_.DisplayName -eq $ScopeTagName }
 
 if ($ScopeTag) {
-    Write-Host "  Scope Tag already exists: $($ScopeTag.Id)" -ForegroundColor Yellow
+    Write-Log "Scope Tag already exists, skipping creation: $($ScopeTag.Id)" 'SKIP'
 } else {
+    Write-Log "Scope Tag not found; creating '$ScopeTagName'..." 'INFO'
     $ScopeTag = New-MgDeviceManagementRoleScopeTag -DisplayName $ScopeTagName `
                                                    -Description $ScopeTagDescription
-    Write-Host "  Created Scope Tag: $($ScopeTag.Id)" -ForegroundColor Green
+    Write-Log "Created Scope Tag: $($ScopeTag.Id)" 'DONE'
 }
+Complete-Step
 
 # --------------------------------------------------------------------------
 # 4. Define & create the custom Intune RBAC role
@@ -135,7 +212,8 @@ if ($ScopeTag) {
 #    - manage Mobile Apps
 #    - (WCD / provisioning packages are covered by device configuration + enrollment rights)
 # --------------------------------------------------------------------------
-Write-Host "Ensuring custom Intune RBAC role '$CustomRoleName' exists..." -ForegroundColor Cyan
+Start-Step "Ensure custom Intune RBAC role '$CustomRoleName'"
+Write-Log "Preparing role definition with permission list..." 'INFO'
 
 # Resource actions that give SciComp the self-management surface they need
 $ResourceActions = @(
@@ -205,12 +283,15 @@ $ResourceActions = @(
     "Microsoft.Intune_DeviceEnrollmentManagers_Delete"
 )
 
+Write-Log "Role defines $($ResourceActions.Count) allowed resource actions" 'INFO'
+Write-Log "Listing existing role definitions..." 'INFO'
 $ExistingRoles = Get-MgDeviceManagementRoleDefinition -All
 $CustomRole = $ExistingRoles | Where-Object { $_.DisplayName -eq $CustomRoleName }
 
 if ($CustomRole) {
-    Write-Host "  Custom role already exists: $($CustomRole.Id)" -ForegroundColor Yellow
+    Write-Log "Custom role already exists, skipping creation: $($CustomRole.Id)" 'SKIP'
 } else {
+    Write-Log "Custom role not found; creating '$CustomRoleName'..." 'INFO'
     $RoleParams = @{
         DisplayName     = $CustomRoleName
         Description     = "Custom Intune RBAC role for Scientific Computing self-management. Scoped via Scope Tag 'Scientific-Computing'."
@@ -224,13 +305,15 @@ if ($CustomRole) {
         IsBuiltIn       = $false
     }
     $CustomRole = New-MgDeviceManagementRoleDefinition -BodyParameter $RoleParams
-    Write-Host "  Created custom role: $($CustomRole.Id)" -ForegroundColor Green
+    Write-Log "Created custom role: $($CustomRole.Id)" 'DONE'
 }
+Complete-Step
 
 # --------------------------------------------------------------------------
 # 5. Assign the custom role to the admin group, scoped to the Scope Tag
 # --------------------------------------------------------------------------
-Write-Host "Creating / verifying role assignment..." -ForegroundColor Cyan
+Start-Step "Create / verify role assignment"
+Write-Log "Checking for an existing assignment of '$CustomRoleName' to '$AdminGroupName'..." 'INFO'
 
 $ExistingAssignments = Get-MgDeviceManagementRoleAssignment -All
 $ExistingAssignment = $ExistingAssignments | Where-Object {
@@ -239,8 +322,9 @@ $ExistingAssignment = $ExistingAssignments | Where-Object {
 }
 
 if ($ExistingAssignment) {
-    Write-Host "  Role assignment already exists: $($ExistingAssignment.Id)" -ForegroundColor Yellow
+    Write-Log "Role assignment already exists, skipping creation: $($ExistingAssignment.Id)" 'SKIP'
 } else {
+    Write-Log "Assignment not found; creating '$CustomRoleName - $AdminGroupName'..." 'INFO'
     $AssignmentParams = @{
         DisplayName       = "$CustomRoleName - $AdminGroupName"
         Description       = "Grants Scientific Computing admins the custom RBAC role, limited to objects tagged with Scope Tag 'Scientific-Computing'."
@@ -250,23 +334,28 @@ if ($ExistingAssignment) {
         ScopeMembers      = @()                      # empty = all devices that carry the tag (or add specific group IDs)
     }
     $Assignment = New-MgDeviceManagementRoleAssignment -BodyParameter $AssignmentParams
-    Write-Host "  Created role assignment: $($Assignment.Id)" -ForegroundColor Green
+    Write-Log "Created role assignment: $($Assignment.Id)" 'DONE'
 }
+Complete-Step
 
 
 # --------------------------------------------------------------------------
 # 6. Post-setup verification – list all Intune role assignments again
 # --------------------------------------------------------------------------
-Write-Host "`n=== Post-setup: Current Intune RBAC role assignments ===" -ForegroundColor Cyan
-Get-MgDeviceManagementRoleAssignment -All |
+Start-Step "Post-setup verification and summary"
+Write-Log "Listing current Intune RBAC role assignments..." 'INFO'
+$PostAssignments = @(Get-MgDeviceManagementRoleAssignment -All)
+$PostAssignments |
     Select-Object DisplayName, Id |
     Format-Table -AutoSize
+Write-Log "$($PostAssignments.Count) role assignments present" 'INFO'
+Complete-Step
 
 
 # --------------------------------------------------------------------------
 # 7. Summary & next steps
 # --------------------------------------------------------------------------
-Write-Host "`n=== Setup complete ===" -ForegroundColor Green
+Write-Log "Setup complete in $([math]::Round($ScriptTimer.Elapsed.TotalSeconds, 1))s" 'DONE'
 Write-Host "Admin Group ID     : $($AdminGroup.Id)"
 Write-Host "Scope Tag ID       : $($ScopeTag.Id)"
 Write-Host "Custom Role ID     : $($CustomRole.Id)"
@@ -278,5 +367,6 @@ Write-Host "3. (Optional but recommended) Create dynamic Entra device groups fil
 Write-Host "4. Verify ControlPolicyConflict/MDMWinsOverGP CSP and that no 'All Devices' baselines conflict with SciComp."
 Write-Host "5. Grant the same group read-only access to any tenant-wide profiles that affect SciComp devices (via additional scope-tag assignments if needed)."
 
+Write-Log "Disconnecting from Microsoft Graph..." 'INFO'
 Disconnect-MgGraph | Out-Null
-Write-Host "`nDisconnected from Graph." -ForegroundColor Cyan
+Write-Log "Disconnected from Graph. Script finished." 'DONE'

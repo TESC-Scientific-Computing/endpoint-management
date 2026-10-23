@@ -86,5 +86,6 @@ Root owns: `README.md` (overview, "Start here" summary, dsregcmd notes, issue li
 
 - `assets/images/`: screenshots referenced by README and issues; no child AGENTS.md needed
 - [Issues/AGENTS.md](Issues/AGENTS.md): issue write-ups
+- [scripts/AGENTS.md](scripts/AGENTS.md): PowerShell setup and access-query scripts
 - [Configurations/AGENTS.md](Configurations/AGENTS.md): unattend and other deployable configs
 - [examples/AGENTS.md](examples/AGENTS.md): reference command output captures
